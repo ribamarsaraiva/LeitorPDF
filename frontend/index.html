@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Leitor PDF</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #1e1e2e; color: #cdd6f4; min-height: 100vh; padding: 24px; }
+    h1 { font-size: 1.4rem; color: #cba6f7; }
+    #header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    #timer-box { display: flex; align-items: center; gap: 8px; }
+    #timer-display { font-size: 1rem; font-weight: 700; color: #f38ba8; min-width: 72px; text-align: center; }
+    #timer-display.done { color: #a6e3a1; }
+    select#timer-select {
+      background: #313244; color: #cdd6f4; border: 1px solid #45475a;
+      border-radius: 6px; padding: 4px 8px; font-size: 0.85rem; cursor: pointer;
+    }
+    .tbtn {
+      border: none; border-radius: 6px; padding: 5px 12px;
+      font-size: 0.82rem; cursor: pointer; font-weight: 600;
+    }
+    .tbtn:disabled { opacity: 0.35; cursor: default; }
+    #btn-start { background: #a6e3a1; color: #1e1e2e; }
+    #btn-pause { background: #fab387; color: #1e1e2e; }
+    #btn-stop  { background: #f38ba8; color: #1e1e2e; }
+    #io-box { display: flex; gap: 8px; margin-bottom: 16px; justify-content: flex-end; }
+    .iobtn {
+      border: none; border-radius: 6px; padding: 5px 14px;
+      font-size: 0.82rem; cursor: pointer; font-weight: 600;
+      background: #45475a; color: #cdd6f4;
+    }
+    .iobtn:hover { background: #585b70; }
+    .folder { margin-bottom: 8px; }
+    .folder-header {
+      display: flex; align-items: center; gap: 8px;
+      cursor: pointer; padding: 8px 12px;
+      background: #313244; border-radius: 8px;
+      user-select: none;
+    }
+    .folder-header:hover { background: #45475a; }
+    .folder-icon { font-size: 1.1rem; }
+    .folder-name { flex: 1; font-weight: 600; }
+    .folder-progress { font-size: 0.78rem; color: #a6e3a1; white-space: nowrap; }
+    .folder-bar { height: 4px; background: #45475a; border-radius: 2px; margin: 2px 0 0 36px; }
+    .folder-bar-fill { height: 100%; background: #a6e3a1; border-radius: 2px; transition: width 0.3s; }
+    .folder-children { padding-left: 16px; margin-top: 4px; display: none; }
+    .folder-children.open { display: block; }
+    .pdf-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 12px; margin: 3px 0;
+      background: #1e1e2e; border-radius: 6px;
+      cursor: pointer; border: 1px solid #313244;
+    }
+    .pdf-item:hover { background: #313244; border-color: #89b4fa; }
+    .pdf-name { flex: 1; font-size: 0.9rem; }
+    .pdf-progress { font-size: 0.75rem; color: #89dceb; white-space: nowrap; }
+    .pdf-bar { height: 3px; background: #313244; border-radius: 2px; margin: 2px 0 0 22px; }
+    .pdf-bar-fill { height: 100%; background: #89dceb; border-radius: 2px; transition: width 0.3s; }
+    .badge-done { font-size: 0.7rem; background: #a6e3a1; color: #1e1e2e; border-radius: 4px; padding: 1px 5px; }
+  </style>
+</head>
+<body>
+  <div id="overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:999;align-items:center;justify-content:center;">
+    <div style="background:#313244;border-radius:16px;padding:40px 48px;text-align:center;max-width:360px;">
+      <div style="font-size:2.5rem;margin-bottom:12px;">☕</div>
+      <div style="font-size:1.2rem;font-weight:700;color:#cba6f7;margin-bottom:8px;">Hora de descansar!</div>
+      <div style="font-size:0.9rem;color:#cdd6f4;margin-bottom:24px;">Faça uma pausa e volte descansado para continuar seus estudos.</div>
+      <button onclick="document.getElementById('overlay').style.display='none'" style="background:#a6e3a1;color:#1e1e2e;border:none;border-radius:8px;padding:8px 24px;font-size:0.95rem;font-weight:700;cursor:pointer;">OK, entendido!</button>
+    </div>
+  </div>
+  <div id="header">
+    <h1>📚 Leitor PDF</h1>
+    <div id="timer-box">
+      <span id="timer-display">00:00:00</span>
+      <select id="timer-select">
+        <option value="5">5 min</option>
+        <option value="10">10 min</option>
+        <option value="15" selected>15 min</option>
+        <option value="20">20 min</option>
+        <option value="25">25 min</option>
+        <option value="30">30 min</option>
+        <option value="35">35 min</option>
+        <option value="40">40 min</option>
+        <option value="45">45 min</option>
+        <option value="50">50 min</option>
+        <option value="55">55 min</option>
+        <option value="60">60 min</option>
+      </select>
+      <button id="btn-start" class="tbtn">▶ Iniciar</button>
+      <button id="btn-pause" class="tbtn" disabled>⏸ Pausar</button>
+      <button id="btn-stop"  class="tbtn" disabled>⏹ Parar</button>
+    </div>
+  </div>
+  <div id="io-box">
+    <button class="iobtn" onclick="exportProgress()">⬇ Exportar progresso</button>
+    <button class="iobtn" onclick="document.getElementById('import-input').click()">⬆ Importar progresso</button>
+    <input id="import-input" type="file" accept=".json" style="display:none" onchange="importProgress(this)">
+  </div>
+  <div id="tree"></div>
+
+  <script>
+    const API = '';
+    const OPEN_KEY = 'folders_open';
+
+    function getOpenFolders() {
+      try { return new Set(JSON.parse(sessionStorage.getItem(OPEN_KEY)) || []); }
+      catch { return new Set(); }
+    }
+
+    function saveOpenFolders(set) {
+      sessionStorage.setItem(OPEN_KEY, JSON.stringify([...set]));
+    }
+
+    async function load() {
+      const [tree, bulk] = await Promise.all([
+        fetch(`${API}/api/tree`).then(r => r.json()),
+        fetch(`${API}/api/progress-bulk`).then(r => r.json())
+      ]);
+      document.getElementById('tree').innerHTML = '';
+      renderNodes(tree, document.getElementById('tree'), bulk, '');
+    }
+
+    function calcFolderProgress(children, bulk, prefix) {
+      let read = 0, total = 0;
+      for (const n of children) {
+        if (n.type === 'pdf') {
+          const p = prefix ? `${prefix}/${n.name}` : n.name;
+          const prog = bulk[p];
+          const tp = prog ? prog.total_pages : 1;
+          const cp = prog ? prog.current_page : 1;
+          total += tp;
+          read += cp - 1;
+        } else if (n.type === 'folder') {
+          const sub = calcFolderProgress(n.children, bulk, prefix ? `${prefix}/${n.name}` : n.name);
+          total += sub.total;
+          read += sub.read;
+        }
+      }
+      return { read, total };
+    }
+
+    function renderNodes(nodes, container, bulk, prefix) {
+      for (const node of nodes) {
+        const path = prefix ? `${prefix}/${node.name}` : node.name;
+        if (node.type === 'folder') {
+          const { read, total } = calcFolderProgress(node.children, bulk, path);
+          const pct = total > 0 ? Math.round((read / total) * 100) : 0;
+
+          const div = document.createElement('div');
+          div.className = 'folder';
+          div.innerHTML = `
+            <div class="folder-header">
+              <span class="folder-icon">📁</span>
+              <span class="folder-name">${node.name}</span>
+              <span class="folder-progress">${pct}% concluído</span>
+              ${pct === 100 ? '<span class="badge-done">✓</span>' : ''}
+            </div>
+            <div class="folder-bar"><div class="folder-bar-fill" style="width:${pct}%"></div></div>
+            <div class="folder-children"></div>
+          `;
+          const header = div.querySelector('.folder-header');
+          const children = div.querySelector('.folder-children');
+          const openFolders = getOpenFolders();
+          if (openFolders.has(path)) children.classList.add('open');
+          header.addEventListener('click', () => {
+            children.classList.toggle('open');
+            const updated = getOpenFolders();
+            if (children.classList.contains('open')) updated.add(path);
+            else updated.delete(path);
+            saveOpenFolders(updated);
+          });
+          renderNodes(node.children, children, bulk, path);
+          container.appendChild(div);
+
+        } else if (node.type === 'pdf') {
+          const prog = bulk[path];
+          const tp = prog ? prog.total_pages : null;
+          const cp = prog ? prog.current_page : 1;
+          const pct = tp ? Math.round(((cp - 1) / tp) * 100) : 0;
+          const label = tp ? `pág. ${cp}/${tp} (${pct}%)` : 'não lido';
+
+          const div = document.createElement('div');
+          div.innerHTML = `
+            <div class="pdf-item" data-path="${path}">
+              <span>📄</span>
+              <span class="pdf-name">${node.name.replace(/_/g,' ')}</span>
+              <span class="pdf-progress">${label}</span>
+              ${pct === 100 ? '<span class="badge-done">✓</span>' : ''}
+            </div>
+            <div class="pdf-bar"><div class="pdf-bar-fill" style="width:${pct}%"></div></div>
+          `;
+          div.querySelector('.pdf-item').addEventListener('click', () => {
+            window.location.href = `viewer.html?path=${encodeURIComponent(path)}`;
+          });
+          container.appendChild(div);
+        }
+      }
+    }
+
+    load();
+
+    // --- Timer ---
+    let timerInterval = null;
+    let elapsed = 0;
+    let paused = false;
+
+    const display  = document.getElementById('timer-display');
+    const select   = document.getElementById('timer-select');
+    const btnStart = document.getElementById('btn-start');
+    const btnPause = document.getElementById('btn-pause');
+    const btnStop  = document.getElementById('btn-stop');
+
+    function fmt(s) {
+      const h = String(Math.floor(s / 3600)).padStart(2,'0');
+      const m = String(Math.floor((s % 3600) / 60)).padStart(2,'0');
+      const sec = String(s % 60).padStart(2,'0');
+      return `${h}:${m}:${sec}`;
+    }
+
+    function reset() {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      elapsed = 0;
+      paused = false;
+      display.textContent = '00:00:00';
+      display.classList.remove('done');
+      select.disabled = false;
+      btnStart.textContent = '▶ Iniciar';
+      btnStart.disabled = false;
+      btnPause.textContent = '⏸ Pausar';
+      btnPause.disabled = true;
+      btnStop.disabled = true;
+    }
+
+    btnStart.addEventListener('click', () => {
+      const limit = parseInt(select.value) * 60;
+      paused = false;
+      select.disabled = true;
+      btnStart.disabled = true;
+      btnPause.disabled = false;
+      btnStop.disabled = false;
+      btnPause.textContent = '⏸ Pausar';
+      timerInterval = setInterval(() => {
+        elapsed++;
+        display.textContent = fmt(elapsed);
+        if (elapsed >= limit) {
+          clearInterval(timerInterval);
+          reset();
+          document.getElementById('overlay').style.display = 'flex';
+        }
+      }, 1000);
+    });
+
+    btnPause.addEventListener('click', () => {
+      if (!paused) {
+        clearInterval(timerInterval);
+        paused = true;
+        btnPause.disabled = true;
+        btnStart.textContent = '▶ Continuar';
+        btnStart.disabled = false;
+      }
+    });
+
+    btnStop.addEventListener('click', reset);
+
+    // --- Exportar / Importar ---
+    function exportProgress() {
+      const a = document.createElement('a');
+      a.href = '/api/export';
+      a.download = 'leitor_progress.json';
+      a.click();
+    }
+
+    async function importProgress(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch('/api/import', { method: 'POST', body: form });
+      const data = await res.json();
+      input.value = '';
+      if (data.ok) {
+        alert(`Importado com sucesso! ${data.imported} registro(s) atualizado(s).`);
+        load();
+      } else {
+        alert('Erro ao importar o arquivo.');
+      }
+    }
+  </script>
+</body>
+</html>
